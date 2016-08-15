@@ -336,7 +336,7 @@ cmd_show() {
 			die "Try adding more words to narrow down."
 		else
 			path=$(cat "$matches_file" | perl -pe 's/\e\[?.*?[\@-~]//g')
-			echo "Retrieving password for $(cat "$matches_files")"
+			echo "Retrieving password for $(cat "$matches_file")"
 			rm -f "$matches_file" "$matches_file_swap"
 		fi
 	fi
