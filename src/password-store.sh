@@ -320,9 +320,8 @@ cmd_show() {
 			shift
 		done
 		local num_result=$(wc -l < "$matches_file" | xargs)
-		local matches=$(cat "$matches_file")
-		rm -f "$matches_file" "$matches_file_swap"
 		if [[ $num_result -eq 0 ]]; then
+			rm -f "$matches_file" "$matches_file_swap"
 			die "No matching password found for $orig_query"
 		elif [[ $num_result -gt 1 ]]; then
 			echo
@@ -331,12 +330,14 @@ cmd_show() {
 			else
 				echo "$num_result passwords in database:"
 			fi
-			echo "$matches"
+			cat "$matches_file"
 			echo
+			rm -f "$matches_file" "$matches_file_swap"
 			die "Try adding more words to narrow down."
 		else
-			path=$(echo "$matches" | perl -pe 's/\e\[?.*?[\@-~]//g')
-			echo "Retrieving password for $matches"
+			path=$(cat "$matches_file" | perl -pe 's/\e\[?.*?[\@-~]//g')
+			echo "Retrieving password for $(cat "$matches_files")"
+			rm -f "$matches_file" "$matches_file_swap"
 		fi
 	fi
 	local passfile="$PREFIX/$path.gpg"
