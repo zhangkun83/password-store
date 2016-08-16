@@ -312,7 +312,7 @@ cmd_show() {
 	if [[ $fuzzy -eq 1 ]]; then
 		local orig_query="$@"
 		cd "$PREFIX"
-		local -a matches matches_copy
+		local matches matches_copy
 		matches=$(find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g')
 		while [[ $# -gt 0 ]]; do
 			matches_copy="$matches"
