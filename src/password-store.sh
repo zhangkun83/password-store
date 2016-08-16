@@ -313,19 +313,16 @@ cmd_show() {
 		local orig_query="$@"
 		cd "$PREFIX"
 		local -a matches matches_copy
-		# "<()" is the process substitution syntax that turns a command line's output into an FD that can be used by the
-		# redirect operator "<".
-		readarray matches < <(find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g')
+		matches=$(find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g')
 		while [[ $# -gt 0 ]]; do
-			# Use printf instead of echo, because echo adds extra space after an element
-			# Not sure whether printf expands the whole array on command line, or handles it in a special way.
-			# I have tested this syntax with a pretty large array (~200,000 items, 7MB in total) on a linux box
-			# without a problem.
-			readarray matches_copy < <(printf '%s' "${matches[@]}")
-			readarray matches < <(printf '%s' "${matches_copy[@]}" | fgrep --color=always "$1")
+			matches_copy="$matches"
+			# Builtin functions such as "echo" must have special treatment wrt command line length.
+			# If matches is very large, external commands such as "ls" would fail with "Argument list too long",
+			# while "echo" would work just fine in this case.
+			matches=$(echo "$matches_copy" | fgrep --color=always "$1")
 			shift
 		done
-		local num_result=${#matches[@]}
+		local num_result=$(echo "$matches" | sed '/^$/d' | wc -l | xargs)  # xargs to trim white spaces introduced by wc
 		if [[ $num_result -eq 0 ]]; then
 			die "No matching password found for $orig_query"
 		elif [[ $num_result -gt 1 ]]; then
@@ -335,12 +332,12 @@ cmd_show() {
 			else
 				echo "$num_result passwords in database:"
 			fi
-			printf '%s' "${matches[@]}"
+			echo "$matches"
 			echo
 			die "Try adding more words to narrow down."
 		else
-			path=$(printf '%s' "${matches[@]}" | perl -pe 's/\e\[?.*?[\@-~]//g')
-			echo "Retrieving password for ${matches[@]}"
+			path=$(echo -n "$matches" | perl -pe 's/\e\[?.*?[\@-~]//g')
+			echo "Retrieving password for $matches"
 		fi
 	fi
 
