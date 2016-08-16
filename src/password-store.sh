@@ -307,21 +307,26 @@ cmd_show() {
 
 	[[ $err -ne 0 ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [--fuzzy,-f [search-words] | pass-name]"
 
+	# The fuzzy search logic
 	local path="$1"
 	if [[ $fuzzy -eq 1 ]]; then
 		local orig_query="$@"
 		cd "$PREFIX"
-		local matches_file="$(mktemp)"
-		local matches_file_swap="$(mktemp)"
-		find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g' > "$matches_file"
+		local -a matches matches_copy
+		# "<()" is the process substitution syntax that turns a command line's output into an FD that can be used by the
+		# redirect operator "<".
+		readarray matches < <(find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g')
 		while [[ $# -gt 0 ]]; do
-			mv "$matches_file" "$matches_file_swap"
-			cat "$matches_file_swap" | fgrep --color=always "$1" > "$matches_file"
+			# Use printf instead of echo, because echo adds extra space after an element
+			# Not sure whether printf expands the whole array on command line, or handles it in a special way.
+			# I have tested this syntax with a pretty large array (~200,000 items, 7MB in total) on a linux box
+			# without a problem.
+			readarray matches_copy < <(printf '%s' "${matches[@]}")
+			readarray matches < <(printf '%s' "${matches_copy[@]}" | fgrep --color=always "$1")
 			shift
 		done
-		local num_result=$(wc -l < "$matches_file" | xargs)
+		local num_result=${#matches[@]}
 		if [[ $num_result -eq 0 ]]; then
-			rm -f "$matches_file" "$matches_file_swap"
 			die "No matching password found for $orig_query"
 		elif [[ $num_result -gt 1 ]]; then
 			echo
@@ -330,16 +335,15 @@ cmd_show() {
 			else
 				echo "$num_result passwords in database:"
 			fi
-			cat "$matches_file"
+			printf '%s' "${matches[@]}"
 			echo
-			rm -f "$matches_file" "$matches_file_swap"
 			die "Try adding more words to narrow down."
 		else
-			path=$(cat "$matches_file" | perl -pe 's/\e\[?.*?[\@-~]//g')
-			echo "Retrieving password for $(cat "$matches_file")"
-			rm -f "$matches_file" "$matches_file_swap"
+			path=$(printf '%s' "${matches[@]}" | perl -pe 's/\e\[?.*?[\@-~]//g')
+			echo "Retrieving password for ${matches[@]}"
 		fi
 	fi
+
 	local passfile="$PREFIX/$path.gpg"
 	check_sneaky_paths "$path"
 	if [[ -f $passfile ]]; then
