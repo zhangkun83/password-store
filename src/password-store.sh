@@ -224,7 +224,7 @@ cmd_usage() {
 	        List passwords.
 	    $PROGRAM find pass-names...
 	    	List passwords that match pass-names.
-	    $PROGRAM [show] [--clip[=line-number],-c[line-number]] pass-name
+	    $PROGRAM [show] [--clip[=line-number],-c[line-number]] [--fuzzy,-f [search-words] | pass-name]
 	        Show existing password and optionally put it on the clipboard.
 	        If put on the clipboard, it will be cleared in $CLIP_TIME seconds.
 	    $PROGRAM grep search-string
@@ -295,18 +295,52 @@ cmd_init() {
 }
 
 cmd_show() {
-	local opts clip_location clip=0
-	opts="$($GETOPT -o c:: -l clip:: -n "$PROGRAM" -- "$@")"
+	local opts clip_location clip=0 fuzzy=0
+	opts="$($GETOPT -o c::f -l clip::fuzzy -n "$PROGRAM" -- "$@")"
 	local err=$?
 	eval set -- "$opts"
 	while true; do case $1 in
 		-c|--clip) clip=1; clip_location="${2:-1}"; shift 2 ;;
+		-f|--fuzzy) fuzzy=1; shift ;;
 		--) shift; break ;;
 	esac done
 
-	[[ $err -ne 0 ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [pass-name]"
+	[[ $err -ne 0 ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [--fuzzy,-f [search-words] | pass-name]"
 
+	# The fuzzy search logic
 	local path="$1"
+	if [[ $fuzzy -eq 1 ]]; then
+		local orig_query="$@"
+		cd "$PREFIX"
+		local matches matches_copy
+		matches=$(find . -type f | grep '\.gpg$' | sed -e 's/^\.\///g' | sed -e 's/\.gpg$//g')
+		while [[ $# -gt 0 ]]; do
+			matches_copy="$matches"
+			# Builtin functions such as "echo" must have special treatment wrt command line length.
+			# If matches is very large, external commands such as "ls" would fail with "Argument list too long",
+			# while "echo" would work just fine in this case.
+			matches=$(echo "$matches_copy" | fgrep --color=always "$1")
+			shift
+		done
+		local num_result=$(echo "$matches" | sed '/^$/d' | wc -l | xargs)  # xargs to trim white spaces introduced by wc
+		if [[ $num_result -eq 0 ]]; then
+			die "No matching password found for $orig_query"
+		elif [[ $num_result -gt 1 ]]; then
+			echo
+			if [[ -n "$orig_query" ]]; then
+				echo "Found $num_result passwords for $orig_query:"
+			else
+				echo "$num_result passwords in database:"
+			fi
+			echo "$matches"
+			echo
+			die "Try adding more words to narrow down."
+		else
+			path=$(echo -n "$matches" | perl -pe 's/\e\[?.*?[\@-~]//g')
+			echo "Retrieving password for $matches"
+		fi
+	fi
+
 	local passfile="$PREFIX/$path.gpg"
 	check_sneaky_paths "$path"
 	if [[ -f $passfile ]]; then
